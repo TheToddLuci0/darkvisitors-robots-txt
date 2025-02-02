@@ -1,0 +1,60 @@
+name: 'DarkVisitors Robots.txt'
+description: "Add anti-bot methods to your robots.txt using darkvisitors.com"
+
+inputs:
+  outfile:
+    default: ./robots.txt
+    required: true
+    description: "Where to put the final robots.txt file"
+  infile:
+    required: false
+    description: "File to use as a base for the robots.txt file"
+  deny_types:
+    required: true
+    description: 'List of agent types to deny, in ["a", "b"] format.  Defaults to all supported'
+    default: '["AI Assistant", "AI Data Scraper", "AI Search Crawler", "Undocumented AI Agent"]'
+  disallow:
+    required: true
+    description: "Base path to block from. Defaults to /"
+    default: "/"
+
+
+runs:
+  using: composite
+  steps:
+    
+    - name: Get current date
+      id: date-step
+      shell: bash
+      run: echo "date=$(date -I)"" >> "$GITHUB_OUTPUT"
+
+    - name: Cache data
+      id: cache-dv
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.outfile }}
+        key: ${{ inputs.infile != "" && format("{0}-", hashfiles(inputs.infile))  || "" }}${{ steps.date-step.outputs.date }}
+    
+    - name: Load base file
+      shell: bash
+      if: ${{ steps.cache-dv.outputs.cache-hit != 'true' }}
+      run: cp $BASE_FILE $OUTFILE
+      env: 
+        BASE_FILE: ${{ inputs.infile }}
+        OUTFILE: ${{ inputs.outfile }}
+
+    - name: Load darkvisitors data
+      if: ${{ steps.cache-dv.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: >
+        curl
+        -X POST "https://api.darkvisitors.com/robots-txts"
+        -H "Autorization: Bearer ${{ secrets.DARKVISITORS_API_KEY }}"
+        -H "Content-Type: application/json"
+        -o ${{ inputs.outfile }}
+        --append
+        -d '{"agent_types": [${{ inputs.deny_types }}], "disallow": ${{ inputs.disallow }}}'
+
+branding:
+  icon: cloud-off
+  color: gray-dark
